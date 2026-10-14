@@ -154,7 +154,13 @@ def _git(repo: Path, *args: str) -> None:
 @pytest.fixture()
 def origin_repo(tmp_path: Path) -> Path:
     origin = tmp_path / "origin.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    # -b main: on a stock install (no init.defaultBranch set — e.g. the CI
+    # runner), a bare init starts HEAD at master, and pushing main does NOT
+    # repoint an unborn HEAD. A clone of that bare repo then checks out
+    # nothing ("remote HEAD refers to nonexistent ref"), which broke these
+    # tests on CI while they passed wherever defaultBranch=main is configured.
+    # Naming the branch at init makes HEAD/branch agreed-on regardless of env.
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
     seed = tmp_path / "seed"
     seed.mkdir()
     _git(seed, "init", "-q")
@@ -190,7 +196,9 @@ def test_run_git_survives_url_that_looks_like_a_flag(tmp_path: Path) -> None:
     # '-dashy-repo.git' as an option and fail.
     origin = tmp_path / "--dashy-repo.git"
     origin.mkdir()
-    _git(origin, "init", "-q", "--bare")
+    # -b main: same stock-config trap as origin_repo — without it the bare
+    # HEAD stays unborn-master, and the clone checks out nothing.
+    _git(origin, "init", "-q", "--bare", "-b", "main")
     seed = tmp_path / "seed"
     seed.mkdir()
     _git(seed, "init", "-q", "-b", "main")
