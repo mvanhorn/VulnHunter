@@ -76,9 +76,9 @@ curl -X POST http://localhost:8080/api/endpoint \
 ```python
 # Working PoC for VULN-NNN — executes in the recorded runtime
 # (in-process harness example)
-payload = build_payload_from_poc("VULN-NNN")   # EXACT payload from the PoC doc
+payload = build_payload_from_poc("VULN-NNN")  # EXACT payload from the PoC doc
 result = invoke_vulnerable_function(payload)
-print(observed_outcome(result))                # what the attacker gained
+print(observed_outcome(result))  # what the attacker gained
 ```
 
 The script MUST print the observed outcome in a form Phase 3b can measure
