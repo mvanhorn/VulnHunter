@@ -343,3 +343,43 @@ def test_main_no_benchmarks(monkeypatch, tmp_path):
     monkeypatch.setattr(run.sys, "argv", ["run"])
     with pytest.raises(SystemExit):
         run.main()
+
+
+def test_partial_judge_response_preserves_tally_denominator(monkeypatch, tmp_path):
+    import types
+
+    from local_harness.benchmark import judge, tally
+
+    findings = [
+        {
+            "finding_id": f"F{i}",
+            "type": "synthetic",
+            "description": "test case",
+            "benchmark_file": "test.json",
+        }
+        for i in range(1, 4)
+    ]
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "README.md").write_text("Synthetic scanner report")
+    monkeypatch.setattr(run, "STATE_FILE", str(tmp_path / "state.json"))
+    monkeypatch.setattr(
+        judge,
+        "_invoke_judge",
+        lambda *args: types.SimpleNamespace(
+            returncode=0, stderr="", stdout='[{"finding_id":"F1","detected":true}]'
+        ),
+    )
+    state = {
+        "scan_targets": {"toy": {"status": "scanned", "results_dir": str(results)}},
+        "judgments": {},
+    }
+    run.phase_judge({"toy": {"findings": findings}}, state)
+    summary = tally.generate_tally(state)["summary"]
+    assert summary["total_findings"] == 3
+    assert summary["detected"] == 1
+    assert summary["missed"] == 0
+    assert summary["errors"] == 2
+    assert summary["detection_rate"] == pytest.approx(1 / 3, abs=0.0001)
+    persisted = json.loads((tmp_path / "state.json").read_text())
+    assert persisted["judgments"]["F2"]["detected"] is None

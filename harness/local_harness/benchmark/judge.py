@@ -219,7 +219,7 @@ def _parse_judge_output(raw_output, findings):
     try:
         judgments = json.loads(text)
         if isinstance(judgments, list):
-            return judgments
+            return _reconcile_judgments(judgments, findings)
     except json.JSONDecodeError:
         pass
 
@@ -234,3 +234,47 @@ def _parse_judge_output(raw_output, findings):
         }
         for f in findings
     ]
+
+
+def _reconcile_judgments(judgments, findings):
+    """Return one verdict per requested ID; incomplete evidence is an error."""
+    by_id = {f["finding_id"]: [] for f in findings}
+    for judgment in judgments:
+        if not isinstance(judgment, dict):
+            continue
+        fid = judgment.get("finding_id")
+        if isinstance(fid, str) and fid in by_id:
+            by_id[fid].append(judgment)
+
+    reconciled = []
+    for finding in findings:
+        fid = finding["finding_id"]
+        candidates = by_id[fid]
+        reason = None
+        if not candidates:
+            reason = "judge omitted verdict"
+        elif len(candidates) != 1:
+            reason = "judge returned duplicate verdicts"
+        else:
+            verdict = candidates[0]
+            if type(verdict.get("detected")) is not bool:
+                reason = "judge returned invalid detected value"
+            elif (
+                verdict.get("confidence") not in (None, "high", "medium", "low")
+                or not isinstance(verdict.get("reasoning", ""), str)
+                or not isinstance(verdict.get("matched_finding_id"), (str, type(None)))
+            ):
+                reason = "judge returned malformed verdict metadata"
+        if reason is None:
+            reconciled.append(verdict)
+        else:
+            reconciled.append(
+                {
+                    "finding_id": fid,
+                    "detected": None,
+                    "confidence": None,
+                    "reasoning": reason,
+                    "matched_finding_id": None,
+                }
+            )
+    return reconciled

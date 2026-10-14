@@ -117,3 +117,62 @@ def test_judge_findings_batch_429_exhausted(monkeypatch):
     monkeypatch.setattr(judge, "JUDGE_MAX_RETRIES", 1)
     out = judge.judge_findings_batch("report", FINDINGS)
     assert all("retries exhausted" in j["reasoning"] for j in out)
+
+
+def test_partial_response_retains_requested_cases():
+    out = judge._parse_judge_output('[{"finding_id":"F1","detected":true}]', FINDINGS)
+    assert [j["finding_id"] for j in out] == ["F1", "F2"]
+    assert out[0]["detected"] is True
+    assert out[1]["detected"] is None
+    assert "omitted" in out[1]["reasoning"]
+
+
+def test_duplicate_verdict_is_error_regardless_of_order():
+    import json
+
+    for values in ((True, False), (False, True), (True, True)):
+        raw = [{"finding_id": "F1", "detected": value} for value in values]
+        out = judge._parse_judge_output(json.dumps(raw), FINDINGS)
+        assert len(out) == 2
+        assert out[0]["detected"] is None
+        assert "duplicate" in out[0]["reasoning"]
+
+
+def test_invalid_entries_cannot_add_benchmark_cases():
+    raw = '[null, 42, [], {}, {"finding_id":[]}, {"finding_id":"unknown","detected":true}, {"finding_id":"F2","detected":false}]'
+    out = judge._parse_judge_output(raw, FINDINGS)
+    assert [j["finding_id"] for j in out] == ["F1", "F2"]
+    assert out[0]["detected"] is None
+    assert out[1]["detected"] is False
+
+
+def test_invalid_verdict_fields_are_errors():
+    import json
+
+    invalid = [
+        {},
+        {"detected": "false"},
+        {"detected": 1},
+        {"detected": 0},
+        {"detected": None},
+        {"detected": []},
+        {"detected": True, "confidence": []},
+        {"detected": True, "reasoning": 42},
+        {"detected": True, "matched_finding_id": {}},
+    ]
+    for fields in invalid:
+        out = judge._parse_judge_output(json.dumps([{"finding_id": "F1", **fields}]), FINDINGS)
+        assert out[0]["detected"] is None
+
+
+def test_empty_response_keeps_every_case_as_error():
+    out = judge._parse_judge_output("[]", FINDINGS)
+    assert len(out) == len(FINDINGS)
+    assert all(j["detected"] is None for j in out)
+
+
+def test_complete_response_is_reordered_without_changing_verdicts():
+    raw = '[{"finding_id":"F2","detected":false}, {"finding_id":"F1","detected":true}]'
+    out = judge._parse_judge_output(raw, FINDINGS)
+    assert [j["finding_id"] for j in out] == ["F1", "F2"]
+    assert [j["detected"] for j in out] == [True, False]
