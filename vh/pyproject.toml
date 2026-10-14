@@ -22,6 +22,14 @@ upstream = "https://github.com/capitalone/vulnhunter"
 where = ["."]
 include = ["vh*"]
 
+[tool.coverage.run]
+# Scope coverage to this component. Bare `--cov` (as the CI workflow invokes
+# it) otherwise measures every -einstalled package the suite imports — the
+# vulnhunter_common modules sit at 33-48% under vh's suite, which dragged the
+# combined TOTAL to 64.09% and tripped the 65 ratchet. Component-scoped, the
+# suite measures 66.67% (2026-10-14) — see .github/workflows/tests.yml.
+source = ["vh"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
