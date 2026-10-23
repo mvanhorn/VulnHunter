@@ -856,8 +856,17 @@ async def post_issues(
             cost_tracker=summary.cost,
             audit_writer=audit_writer,
         )
+    if extracted.source == issues_extract.SOURCE_CANDIDATES:
+        logger.warning(
+            "Issues extraction used Phase 2 candidate write-ups in %s "
+            "because README.md was missing or empty (%d finding(s))",
+            results_dir,
+            len(extracted.findings),
+        )
     if not extracted.findings:
         summary.note = "no confirmed findings in report"
+        if extracted.source == issues_extract.SOURCE_CANDIDATES:
+            summary.note += " (Phase 2 candidate write-ups; README.md missing)"
         if config.issues.notify_clean_scan:
             summary.clean_scan = await _post_clean_scan_notice(
                 results_dir=results_dir,
@@ -875,6 +884,8 @@ async def post_issues(
                 "skipping receipt POST."
             )
         return summary
+    if extracted.source == issues_extract.SOURCE_CANDIDATES:
+        summary.note = "extracted from Phase 2 candidate write-ups because README.md was missing"
 
     await _ensure_all_labels(target_repo_url=target_repo_url, config=config, verify=verify)
 
